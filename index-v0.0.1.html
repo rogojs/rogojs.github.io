@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="phaser.js"></script>
+    <script src="phaser-arcade-physics.js"></script>
+</head>
+<body>
+
+    <script>
+    var config = {
+        type: Phaser.AUTO,
+        width: 320,
+        height: 240,
+        physics: {
+          default: 'arcade',
+          arcade: {
+            gravity: { y: 1000 }
+          }
+        },
+        scene: {
+            preload: preload,
+            create: create,
+            update: update
+        }
+    };
+
+    var images = [{
+      name: 'pog',
+      location: 'assets/32x32.pog.png'
+    },{
+      name: 'side-pog',
+      location: 'assets/32x2.side-pog.png'
+    },{
+      name: 'background',
+      location: 'assets/320x240.background.png'
+    },{
+      name: 'platform',
+      location: 'assets/160x16.platform.png'
+    }];
+
+    var sprites = [{
+      x: 160,
+      y: 120,
+      name: 'background'
+    }];
+
+    var staticObjects;
+    var player;
+    var cursors;
+    var stackedPogs;
+    var timedEvent;
+    var fireSlammerDebounced;
+    var coin0, coin1, coin2;
+    var colliderForStackedPogs;
+    var overlaperForStackedPogs;
+    var overlaperForCoin0, overlaperForCoin1, overlaperForCoin2;
+
+    var game = new Phaser.Game(config);
+
+    function preload ()
+    {
+      cursors = this.input.keyboard.createCursorKeys();
+
+      images.forEach( e => {
+        this.load.image(e.name,e.location);
+      });
+
+      this.load.spritesheet('dude','assets/dude.png',{ frameWidth: 32, frameHeight: 48});
+    }
+
+    var dude;
+
+    function create ()
+    {
+
+
+      sprites.forEach( e => {
+        this.add.image(e.x, e.y, e. name);
+      });
+
+      dude = this.physics.add.sprite(20,20,'dude');
+      dude.setCollideWorldBounds(true);
+      dude.setBounce(0.6);
+
+      this.anims.create({
+        key: 'left',
+        frames: this.anims.generateFrameNumbers('dude',{start: 0, end: 3}),
+        frameRate: 10,
+        repeat: -1
+      });
+
+      this.anims.create({
+        key: 'turn',
+        frames: [{ key: 'dude', frame: 4}],
+        frameRate: 20
+      });
+
+      this.anims.create({
+        key: 'right',
+        frames: this.anims.generateFrameNumbers('dude',{start: 5, end: 8}),
+        frameRate: 10,
+        repeat: -1
+      });
+
+      staticObjects = this.physics.add.staticGroup();
+      staticObjects.create(160,200,'platform');
+
+      player = this.physics.add.sprite(160,120,'pog');
+      player.setBounce(0.6);
+      player.setCollideWorldBounds(true);
+      this.physics.add.collider(player, staticObjects);
+
+      stackedPogs = this.physics.add.group({
+        key: 'side-pog',
+        repeat: 2,
+        setXY: {
+          x: 160,
+          y: 180,
+          stepY: 3
+        }
+      });
+
+      var somePath = [0,180,319,180];
+      var curve = new Phaser.Curves.Spline(somePath);
+      var movingThing = this.add.follower(curve,0,180,'pog');
+      movingThing.startFollow({repeat: -1, yoyo: true});
+
+      stackedPogs.children.iterate(function(child){
+        child.setBounceY(Phaser.Math.FloatBetween(0.3, 0.6));
+        child.setCollideWorldBounds(true);
+      });
+
+      overlaperForStackedPogs = this.physics.add.overlap(player, stackedPogs, flickPog, null, this);
+
+      colliderForStackedPogs = this.physics.add.collider(stackedPogs, staticObjects);
+
+      fireSlammerDebounced = debounce(fireSlammer.bind(this),5000,true)
+
+      coin0 = this.physics.add.sprite(96,92,'pog');
+      coin0.setActive(false);
+      coin0.setVisible(false);
+
+      coin1 = this.physics.add.sprite(160,92,'pog');
+      coin1.setActive(false);
+      coin1.setVisible(false);
+
+      coin2 = this.physics.add.sprite(224,92,'pog');
+      coin2.setActive(false);
+      coin2.setVisible(false);
+
+      overlaperForCoin0 = this.physics.add.overlap(stackedPogs, coin0, killPog, null, this);
+      overlaperForCoin0.active = false;
+      overlaperForCoin1 = this.physics.add.overlap(stackedPogs, coin1, killPog, null, this);
+      overlaperForCoin1.active = false;
+      overlaperForCoin2 = this.physics.add.overlap(stackedPogs, coin2, killPog, null, this);
+      overlaperForCoin2.active = false;
+
+    }
+
+
+    function blowUpAPog(){
+      colliderForStackedPogs.active = false;
+      overlaperForStackedPogs.active = false;
+
+      overlaperForCoin0.active = true;
+      overlaperForCoin1.active = true;
+      overlaperForCoin2.active = true;
+
+      stackedPogs.children.entries[0].setActive(false);
+      stackedPogs.children.entries[0].body.angularDrag = 0;
+      stackedPogs.children.entries[0].setGravityY(0);
+      this.physics.moveTo(stackedPogs.children.entries[0],96,64,400,250);
+      if(stackedPogs.children.entries[0].angle >= 0 && stackedPogs.children.entries[0].angle <= 180)
+      {
+        console.log('blue');
+      }
+      else
+      {
+        console.log('red')
+      }
+
+      stackedPogs.children.entries[1].setActive(false);
+      stackedPogs.children.entries[1].body.angularDrag = 0;
+      stackedPogs.children.entries[1].setGravityY(0);
+      this.physics.moveTo(stackedPogs.children.entries[1],160,64,400,250);
+
+      stackedPogs.children.entries[2].setActive(false);
+      stackedPogs.children.entries[2].body.angularDrag = 0;
+      stackedPogs.children.entries[2].setGravityY(0);
+      this.physics.moveTo(stackedPogs.children.entries[2],224,64,400,250);
+    }
+
+    function update ()
+    {
+      if (cursors.left.isDown)
+      {
+          dude.setVelocityX(-160);
+
+          dude.anims.play('left', true);
+      }
+      else if (cursors.right.isDown)
+      {
+          dude.setVelocityX(160);
+
+          dude.anims.play('right', true);
+      }
+      else
+      {
+          dude.setVelocityX(0);
+
+          dude.anims.play('turn');
+      }
+
+      if (cursors.up.isDown)
+      {
+          dude.setVelocityY(-330);
+      }
+
+      if(cursors.up.isDown)
+      {
+        player.body.reset(160,120);
+        player.body.setGravityY(0);
+        player.setVelocityY(0);
+      }
+
+      if(cursors.down.isDown)
+      {
+        fireSlammerDebounced();
+      }
+
+    }
+
+    function killPog(pog, coin)
+    {
+      pog.setVisible(true);
+      coin.setVisible(false);
+    }
+
+    function flickPog(player, pog)
+    {
+      pog.setVelocity(Phaser.Math.FloatBetween(-0.8, 0.8) * 500,Phaser.Math.FloatBetween(-0.8, 0.8) * 500);
+      pog.body.angularVelocity = Phaser.Math.FloatBetween(-0.8, 0.8) * 600;
+      pog.body.angularDrag = 2;
+      pog.setGravityY(800);
+    }
+
+    function fireSlammer(){
+      player.body.setGravityY(1000);
+      player.setVelocityY(750);
+      this.time.addEvent({ delay: 3500, callback: blowUpAPog, callbackScope: this, repeat: 1 });
+    }
+
+    function debounce(func, wait, immediate) {
+      var timeout;
+
+      return function executedFunction() {
+        var context = this;
+        var args = arguments;
+
+        var later = function() {
+          timeout = null;
+          if (!immediate) func.apply(context, args);
+        };
+
+        var callNow = immediate && !timeout;
+
+        clearTimeout(timeout);
+
+        timeout = setTimeout(later, wait);
+
+        if (callNow) func.apply(context, args);
+      };
+    };
+
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="phaser.js"></script>
+    <script src="matter.js"></script>
+    <!-- <script src="phaser-arcade-physics.js"></script> -->
+</head>
+<body>
+
+    <script>
+    var player,
+        ground = [],
+        canJump = false,
+        upKeyReleased = true,
+        timedEvent,
+        reusableTimedEvent,
+        startGameSprite,
+        gameStarted = false,
+        currentScore = 0,
+        lastHighScore = 0,
+        onscreenMessages = {
+          JumpStart : {
+            text: 'JUMP ON TO START',
+            instance: null,
+            style: {
+              fontFamily: 'Arial',
+              fontSize: 10,
+              fontStyle: 'bold',
+              color: '#FFFFFF',
+              align: 'center'
+            }
+          },
+          GoodLuck : {
+            text: 'GOOD LUCK!!!',
+            instance: null,
+            ttl: 0,
+            style: {
+              fontFamily: 'Arial',
+              fontSize: 10,
+              fontStyle: 'bold',
+              color: '#FFFFFF',
+              align: 'center'
+            }
+          },
+          GameOver : {
+            text: 'GAME OVER',
+            instance: null
+          },
+          Score : {
+            text: 'SCORE',
+            instance: null,
+            style: {
+              fontFamily: 'Arial',
+              fontSize: 10,
+              fontStyle: 'bold',
+              color: '#FFFFFF',
+              align: 'center'
+            }
+          },
+          CurrentScore : {
+            text: 'SCORE',
+            instance: null,
+            style: {
+              fontFamily: 'Arial',
+              fontSize: 10,
+              fontStyle: 'bold',
+              color: '#FFFFFF',
+              align: 'center'
+            }
+          },
+          Best : {
+            text: 'BEST',
+            instance: null,
+            style: {
+              fontFamily: 'Arial',
+              fontSize: 10,
+              fontStyle: 'bold',
+              color: '#FFFFFF',
+              align: 'center'
+            }
+          },
+        };
+
+    var config = {
+        type: Phaser.AUTO,
+        width: 320,
+        height: 240,
+        physics: {
+          default: 'matter',
+          matter: {
+            gravity: { y: 0.9 },
+            debug: false
+          }
+        },
+        scene: {
+            preload: preload,
+            create: create,
+            update: update
+        }
+    };
+
+    var images = [{
+      name: 'invisible-box',
+      location: 'assets/16x16.invisible.box.png'
+      },{
+        name: 'invisible-box-large',
+        location: 'assets/48x48.invisible.box.png'
+      },{
+      name: 'background',
+      location: 'assets/320x240.mega-man-background.png'
+      },{
+      name: 'good-box',
+      location: 'assets/32x8.platform.png'
+    }];
+
+    var spritesheets = [{
+      name: 'player',
+      location: 'assets/megaman.sheet.png',
+      config: { frameWidth: 40, frameHeight: 40}
+    }];
+
+    var overlays = [{
+      x: 160,
+      y: 120,
+      name: 'background'
+    }];
+
+    var staticObjects;
+    var player;
+    var cursors;
+    var stackedPogs;
+    var timedEvent;
+    var fireSlammerDebounced;
+    var coin0, coin1, coin2;
+    var colliderForStackedPogs;
+    var overlaperForStackedPogs;
+    var overlaperForCoin0, overlaperForCoin1, overlaperForCoin2;
+
+    var game = new Phaser.Game(config);
+
+    function preload ()
+    {
+      cursors = this.input.keyboard.createCursorKeys();
+
+      images.forEach( e => {
+        this.load.image(e.name,e.location);
+      });
+
+      spritesheets.forEach( e => {
+        this.load.spritesheet(e.name, e.location, e.config);
+      });
+
+    }
+
+    function create ()
+    {
+      this.matter.world.setBounds(0,0,320,240,32,true,true,true,true);
+
+      overlays.forEach( e => {
+        this.add.image(e.x, e.y, e.name);
+      });
+
+      player = this.matter.add.sprite(16,120,'player',null, {vertices: [{x:10,y:0},{x:10,y:40},{x:30,y:40},{x: 30, y:0}]});
+
+      player.name = "player";
+      player.setBounce(0.2);
+      player.setFixedRotation();
+
+      this.anims.create({
+         key: 'stopped',
+         frames: [{ key: 'player', frame: 0}],
+         frameRate: 20
+       });
+
+       this.anims.create({
+         key: 'right',
+         frames: this.anims.generateFrameNumbers('player',{start: 10, end: 15}),
+         frameRate: 10,
+         repeat: -1
+       });
+
+       this.anims.create({
+         key: 'left',
+         frames: this.anims.generateFrameNumbers('player',{start: 10, end: 15}),
+         frameRate: 10,
+         repeat: -1
+       });
+
+       //these won't have a name
+      this.matter.add.rectangle(0,190,32,16, {restitution: 0.9, isStatic: true}).name="ground";
+      this.matter.add.rectangle(200,222,240,16, {restitution: 0.9, isStatic: true}).name="ground";
+      this.matter.add.rectangle(52,208,80,16, {restitution: 0.0, isStatic: true, angle: 0.488692}).name="ground";
+
+      this.matter.world.on('collisionstart',function(event, objectA, objectB){
+
+        let objectAInCollision = event.pairs[0].bodyA.gameObject != null ? event.pairs[0].bodyA.gameObject.name : 'ground';
+        let objectBInCollision = event.pairs[0].bodyB.gameObject != null ? event.pairs[0].bodyB.gameObject.name : 'ground';
+
+        if(objectAInCollision === 'player' && objectBInCollision === 'ground')
+        {
+          canJump = true;
+        }
+
+        if(objectAInCollision === 'player' && objectBInCollision === 'good-box')
+        {
+          currentScore++;
+          onscreenMessages.CurrentScore.instance.setText('SCORE: ' + currentScore);
+          player.setVelocityY(-8.5);
+          event.pairs[0].bodyB.gameObject.destroy();
+        }
+
+        if(objectBInCollision === 'player' && objectAInCollision === 'good-box')
+        {
+          currentScore++;
+          onscreenMessages.CurrentScore.instance.setText('SCORE: ' + currentScore);
+          player.setVelocityY(-8.5);
+          event.pairs[0].bodyA.gameObject.destroy();
+        }
+
+        if(objectAInCollision === 'player' && objectBInCollision === 'start-box' && gameStarted == false)
+        {
+          timedEvent.paused = false;
+          player.setVelocityY(-8.5);
+          event.pairs[0].bodyB.gameObject.visible = false;
+          event.pairs[0].bodyB.isSensor = true;
+          gameStarted = true;
+          onscreenMessages.JumpStart.instance.visible = false;
+          onscreenMessages.GoodLuck.instance.visible = true;
+          onscreenMessages.GoodLuck.ttl = 2;
+          console.log('game on!')
+        }
+
+        if(objectAInCollision === 'player' && objectBInCollision === 'ground' && gameStarted == true)
+        {
+          console.log(onscreenMessages.Score.instance);
+          onscreenMessages.Score.instance.setText('SCORE\n' +  currentScore);
+
+          if(currentScore > lastHighScore)
+          {
+            lastHighScore = currentScore;
+            onscreenMessages.Score.instance.setText('*NEW BEST*\n' +  currentScore);
+          }
+          else
+          {
+            onscreenMessages.Score.instance.setText('SCORE\n' +  currentScore);
+          }
+
+
+          currentScore = 0;
+          console.log('your high score: ' + lastHighScore)
+          onscreenMessages.Best.instance.setText('BEST: ' + lastHighScore);
+
+          gameStarted = false;
+          onscreenMessages.CurrentScore.instance.setText('SCORE: 0');
+          onscreenMessages.JumpStart.instance.visible = true;
+
+
+          onscreenMessages.Score.instance.visible = true;
+          onscreenMessages.Score.ttl = 4;
+
+          console.log('game over')
+          event.pairs[0].bodyA.gameObject.setPosition(16, 120);
+          startGameSprite.visible = true;
+          timedEvent.paused = true;
+        }
+
+        if(objectAInCollision === 'ground' && objectBInCollision === 'good-box')
+        {
+          event.pairs[0].bodyB.gameObject.destroy();
+        }
+
+        if(objectAInCollision === 'good-box' && objectBInCollision === 'good-box')
+        {
+          event.pairs[0].bodyB.gameObject.destroy();
+        }
+
+      });
+
+      timedEvent = this.time.addEvent({ delay: 800, callback: spawnPlatform, callbackScope: this, loop: true, paused: true});
+      reusableTimedEvent = this.time.addEvent({ delay: 800, callback: runEvent, callbackScope: this, loop: true, paused: false});
+
+      startGameSprite = this.matter.add.sprite(160,210,'good-box',null,{isStatic: true});
+      startGameSprite.name = 'start-box';
+
+      onscreenMessages.JumpStart.instance = this.add.text(160,180,onscreenMessages.JumpStart.text, onscreenMessages.JumpStart.style);
+      onscreenMessages.JumpStart.instance.setOrigin(0.5);
+
+      onscreenMessages.GoodLuck.instance = this.add.text(160,10,onscreenMessages.GoodLuck.text, onscreenMessages.GoodLuck.style);
+      onscreenMessages.GoodLuck.instance.setOrigin(0.5);
+      onscreenMessages.GoodLuck.instance.visible = false;
+
+      onscreenMessages.Score.instance = this.add.text(160,100,onscreenMessages.Score.text, onscreenMessages.Score.style);
+      onscreenMessages.Score.instance.setOrigin(0.5);
+      onscreenMessages.Score.instance.visible = false;
+
+      onscreenMessages.CurrentScore.instance = this.add.text(260,10,onscreenMessages.CurrentScore.text, onscreenMessages.CurrentScore.style);
+      onscreenMessages.CurrentScore.instance.setText('SCORE: 0');
+
+      onscreenMessages.Best.instance = this.add.text(260,20,onscreenMessages.Best.text, onscreenMessages.Best.style);
+      onscreenMessages.Best.instance.setText('BEST: 0');
+    }
+
+    function runEvent(){
+      console.log('anything need to be cleaned up?')
+
+      if(onscreenMessages.GoodLuck.ttl > 0){
+        onscreenMessages.GoodLuck.ttl--;
+        if(onscreenMessages.GoodLuck.ttl === 0){
+          onscreenMessages.GoodLuck.instance.visible = false;
+        }
+      }
+
+      if(onscreenMessages.Score.ttl > 0){
+        onscreenMessages.Score.ttl--;
+        if(onscreenMessages.Score.ttl === 0){
+          onscreenMessages.Score.instance.visible = false;
+        }
+      }
+
+    }
+
+    function spawnPlatform(){
+      let newSprite = this.matter.add.sprite(160,186,'good-box');
+      newSprite.setFixedRotation();
+      newSprite.name = 'good-box';
+      newSprite.setVelocity(  Phaser.Math.FloatBetween(-0.8, 0.8) * 4,
+                              Phaser.Math.FloatBetween(0.5, 1.0) * -8);
+
+    }
+
+    function update ()
+    {
+      if(player != null)
+      {
+        if (cursors.left.isDown)
+        {
+             player.setVelocityX(-2.5);
+             player.flipX = true;
+             player.anims.play('left', true);
+        }
+        else if (cursors.right.isDown)
+        {
+              player.setVelocityX(2.5);
+              player.flipX = false;
+              player.anims.play('right', true);
+        }
+        else
+        {
+             player.setVelocityX(0);
+             player.anims.play('stopped');
+        }
+
+        if (cursors.up.isDown)// && canJump && upKeyReleased)
+        {
+            if(player.body.isStatic == true)
+            {
+              player.setFixedRotation();
+              player.setStatic(false);
+            }
+
+            canJump = false;
+            upKeyReleased = false;
+            player.setVelocityY(-3.5);
+        }
+      }
+
+      if(cursors.up.isUp)
+        upKeyReleased = true;
+
+    }
+
+
+    </script>
+
+</body>
+</html>

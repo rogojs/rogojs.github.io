@@ -1,0 +1,27 @@
+{
+  "resources": [
+    "../assets/sfx.sprites.mp3"
+  ],
+  "spritemap": {
+    "walking": {
+      "start": 0,
+      "end": 0.183,
+      "loop": false
+    },
+    "jumping": {
+      "start": 0.203,
+      "end": 0.375,
+      "loop": false
+    },
+    "coin": {
+      "start": 0.395,
+      "end": 0.566,
+      "loop": false
+    },
+    "short_hard_explosion": {
+      "start": 0.586,
+      "end": 1.256,
+      "loop": false
+    }
+  }
+}

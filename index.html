@@ -10,7 +10,8 @@
     <script>
     var player,
         ground = [],
-        canJump = false,
+        canPlay = false,
+        touchingGround = false,
         upKeyReleased = true,
         timedEvent,
         reusableTimedEvent,
@@ -18,9 +19,28 @@
         gameStarted = false,
         currentScore = 0,
         lastHighScore = 0,
+        isMoving = false,
+        particleEmitters = {
+          platform : null,
+          player : null
+        },
+        soundfx = {
+          sprites: {
+            instance: null,
+            name: 'sprites',
+            asset: 'assets/sfx.sprites.mp3'
+          }
+        },
+        music = {
+          theme : {
+            name: 'theme',
+            asset: 'assets/theme.mp3',
+            instance: null
+          }
+        },
         onscreenMessages = {
           JumpStart : {
-            text: 'JUMP ON TO START',
+            text: 'TOUCH TO START',
             instance: null,
             style: {
               fontFamily: 'Arial',
@@ -81,6 +101,29 @@
           },
         };
 
+    var platformParticle = {
+      speed: { min: 100, max: 200 },
+      angle: { min: 240, max: 300 },
+      scale: { start: 0.75, end: 0 },
+      quantity: { min: 3, max: 7},
+      blendMode: 'ADD',
+      lifespan: 3000,
+      gravityY: 500,
+      on: false
+    },
+    playerParticle = {
+      speed: { min: 50, max: 175 },
+      angle: { min: 260, max: 280 },
+      scale: { start: 0.75, end: 0 },
+      quantity: { min: 8, max: 10},
+      alpha: { start: 1, end: 0 },
+      scale: { start: 0.55, end: 0.05 },
+      blendMode: 'ADD',
+      lifespan: 3500,
+      gravityY: 250,
+      on: false
+    };
+
     var config = {
         type: Phaser.AUTO,
         width: 320,
@@ -106,17 +149,23 @@
         name: 'invisible-box-large',
         location: 'assets/48x48.invisible.box.png'
       },{
-      name: 'background',
-      location: 'assets/320x240.mega-man-background.png'
+        name: 'background',
+        location: 'assets/320x240.mega-man-background.png'
       },{
-      name: 'good-box',
-      location: 'assets/32x8.platform.png'
-    }];
+        name: 'good-box',
+        location: 'assets/32x8.platform.png'
+      },{
+        name: 'platform-particle',
+        location: 'assets/8x8.platform.particle.png'
+      },{
+        name: 'player-particle',
+        location: 'assets/16x16.megaman.particle.png'
+      }];
 
-    var spritesheets = [{
+    var atlases = [{
       name: 'player',
-      location: 'assets/megaman.sheet.png',
-      config: { frameWidth: 40, frameHeight: 40}
+      location: 'assets/megaman.png',
+      config: 'assets/megaman.json'
     }];
 
     var overlays = [{
@@ -137,6 +186,15 @@
     var overlaperForCoin0, overlaperForCoin1, overlaperForCoin2;
 
     var game = new Phaser.Game(config);
+    var skipper = 0;
+
+    function animationUpdate(animation, animationFrame){
+      skipper++;
+      if( animationFrame.textureFrame.includes('run') && ((skipper % 2) == 0) && touchingGround)
+      {
+        this.sound.playAudioSprite('sfx','walking');
+      }
+    }
 
     function preload ()
     {
@@ -146,10 +204,12 @@
         this.load.image(e.name,e.location);
       });
 
-      spritesheets.forEach( e => {
-        this.load.spritesheet(e.name, e.location, e.config);
+      atlases.forEach( e => {
+        this.load.atlas(e.name, e.location, e.config);
       });
 
+      this.load.audio(music.theme.name,music.theme.asset);
+      this.load.audioSprite('sfx','assets/audiosprite.json',['assets/sfx.sprites.mp3']);
     }
 
     function create ()
@@ -160,31 +220,38 @@
         this.add.image(e.x, e.y, e.name);
       });
 
-      player = this.matter.add.sprite(16,120,'player',null, {vertices: [{x:10,y:0},{x:10,y:40},{x:30,y:40},{x: 30, y:0}]});
+       player = this.matter.add.sprite(16,120,'player',null, {vertices: [{x:10,y:0},{x:10,y:40},{x:30,y:40},{x: 30, y:0}]});
 
-      player.name = "player";
-      player.setBounce(0.2);
-      player.setFixedRotation();
+       player.name = "player";
+       player.setBounce(0.2);
+       player.setFixedRotation();
 
-      this.anims.create({
-         key: 'stopped',
-         frames: [{ key: 'player', frame: 0}],
-         frameRate: 20
-       });
+       this.anims.create({
+          key: 'stopped',
+          frames: this.anims.generateFrameNames('player', {prefix: 'stand_', suffix: '.png', start: 0, end: 1, zeroPad: 4})
+        });
 
        this.anims.create({
          key: 'right',
-         frames: this.anims.generateFrameNumbers('player',{start: 10, end: 15}),
+         frames: this.anims.generateFrameNames('player', {prefix: 'run_', suffix: '.png', start: -1, end: 5, zeroPad: 4}),
          frameRate: 10,
          repeat: -1
        });
 
        this.anims.create({
          key: 'left',
-         frames: this.anims.generateFrameNumbers('player',{start: 10, end: 15}),
+         frames: this.anims.generateFrameNames('player', {prefix: 'run_', suffix: '.png', start: 0, end: 5, zeroPad: 4}),
          frameRate: 10,
          repeat: -1
        });
+
+       this.anims.create({
+         key: 'falling',
+         frames: this.anims.generateFrameNames('player', {prefix: 'fall_', suffix: '.png', start: 0, end: 1, zeroPad: 4}),
+         repeat: -1
+       });
+
+       player.on('animationupdate',animationUpdate,this);
 
        //these won't have a name
       this.matter.add.rectangle(0,190,32,16, {restitution: 0.9, isStatic: true}).name="ground";
@@ -198,41 +265,54 @@
 
         if(objectAInCollision === 'player' && objectBInCollision === 'ground')
         {
-          canJump = true;
+          touchingGround = true;
         }
 
         if(objectAInCollision === 'player' && objectBInCollision === 'good-box')
         {
+          particleEmitters.platform.emitParticleAt(event.pairs[0].bodyB.gameObject.x,event.pairs[0].bodyB.gameObject.y);
+          this.cameras.main.shake(100,0.01);
           currentScore++;
           onscreenMessages.CurrentScore.instance.setText('SCORE: ' + currentScore);
           player.setVelocityY(-8.5);
+          touchingGround = false;
           event.pairs[0].bodyB.gameObject.destroy();
+          this.sound.playAudioSprite('sfx','short_hard_explosion');
         }
 
         if(objectBInCollision === 'player' && objectAInCollision === 'good-box')
         {
+          particleEmitters.platform.emitParticleAt(event.pairs[0].bodyB.gameObject.x,event.pairs[0].bodyB.gameObject.y);
+          this.cameras.main.shake(100,0.01);
           currentScore++;
           onscreenMessages.CurrentScore.instance.setText('SCORE: ' + currentScore);
           player.setVelocityY(-8.5);
+          touchingGround = false;
           event.pairs[0].bodyA.gameObject.destroy();
+          this.sound.playAudioSprite('sfx','short_hard_explosion');
         }
 
         if(objectAInCollision === 'player' && objectBInCollision === 'start-box' && gameStarted == false)
         {
           timedEvent.paused = false;
           player.setVelocityY(-8.5);
+          this.sound.playAudioSprite('sfx','jumping',{ volume: 0.5});
+          touchingGround = false;
           event.pairs[0].bodyB.gameObject.visible = false;
           event.pairs[0].bodyB.isSensor = true;
           gameStarted = true;
+          particleEmitters.platform.emitParticleAt(event.pairs[0].bodyB.gameObject.x,event.pairs[0].bodyB.gameObject.y);
           onscreenMessages.JumpStart.instance.visible = false;
           onscreenMessages.GoodLuck.instance.visible = true;
           onscreenMessages.GoodLuck.ttl = 2;
-          console.log('game on!')
         }
 
         if(objectAInCollision === 'player' && objectBInCollision === 'ground' && gameStarted == true)
         {
-          console.log(onscreenMessages.Score.instance);
+          particleEmitters.player.emitParticleAt(event.pairs[0].bodyA.gameObject.x,event.pairs[0].bodyA.gameObject.y);
+
+          this.cameras.main.shake(250,0.05);
+
           onscreenMessages.Score.instance.setText('SCORE\n' +  currentScore);
 
           if(currentScore > lastHighScore)
@@ -247,7 +327,6 @@
 
 
           currentScore = 0;
-          console.log('your high score: ' + lastHighScore)
           onscreenMessages.Best.instance.setText('BEST: ' + lastHighScore);
 
           gameStarted = false;
@@ -258,26 +337,37 @@
           onscreenMessages.Score.instance.visible = true;
           onscreenMessages.Score.ttl = 4;
 
-          console.log('game over')
+          event.pairs[0].bodyA.gameObject.visible = false;
           event.pairs[0].bodyA.gameObject.setPosition(16, 120);
+          touchingGround = false;
+          canPlay = false;
           startGameSprite.visible = true;
           timedEvent.paused = true;
         }
 
         if(objectAInCollision === 'ground' && objectBInCollision === 'good-box')
         {
+          particleEmitters.platform.emitParticleAt(event.pairs[0].bodyB.gameObject.x,event.pairs[0].bodyB.gameObject.y);
+          event.pairs[0].bodyB.gameObject.destroy();
+        }
+
+        if(objectAInCollision === 'good-box' && objectBInCollision === 'ground')
+        {
+          particleEmitters.platform.emitParticleAt(event.pairs[0].bodyA.gameObject.x,event.pairs[0].bodyA.gameObject.y);
           event.pairs[0].bodyB.gameObject.destroy();
         }
 
         if(objectAInCollision === 'good-box' && objectBInCollision === 'good-box')
         {
+          particleEmitters.platform.emitParticleAt(event.pairs[0].bodyB.gameObject.x,event.pairs[0].bodyB.gameObject.y);
+          particleEmitters.platform.emitParticleAt(event.pairs[0].bodyA.gameObject.x,event.pairs[0].bodyA.gameObject.y);
           event.pairs[0].bodyB.gameObject.destroy();
         }
 
-      });
+      }.bind(this));
 
       timedEvent = this.time.addEvent({ delay: 800, callback: spawnPlatform, callbackScope: this, loop: true, paused: true});
-      reusableTimedEvent = this.time.addEvent({ delay: 800, callback: runEvent, callbackScope: this, loop: true, paused: false});
+      reusableTimedEvent = this.time.addEvent({ delay: 500, callback: runEvent, callbackScope: this, loop: true, paused: false});
 
       startGameSprite = this.matter.add.sprite(160,210,'good-box',null,{isStatic: true});
       startGameSprite.name = 'start-box';
@@ -298,10 +388,19 @@
 
       onscreenMessages.Best.instance = this.add.text(260,20,onscreenMessages.Best.text, onscreenMessages.Best.style);
       onscreenMessages.Best.instance.setText('BEST: 0');
+
+      particleEmitters.platform = this.add.particles('platform-particle').createEmitter(platformParticle);
+      particleEmitters.player = this.add.particles('player-particle').createEmitter(playerParticle);
+
+      canPlay = true;
+
+      soundfx.sprites.instance = this.sound.addAudioSprite('sfx');
+      music.theme.instance = this.sound.add(music.theme.name);
+
+      music.theme.instance.play({loop: true, volume: 0.5});
     }
 
     function runEvent(){
-      console.log('anything need to be cleaned up?')
 
       if(onscreenMessages.GoodLuck.ttl > 0){
         onscreenMessages.GoodLuck.ttl--;
@@ -314,6 +413,8 @@
         onscreenMessages.Score.ttl--;
         if(onscreenMessages.Score.ttl === 0){
           onscreenMessages.Score.instance.visible = false;
+          player.visible = true;
+          canPlay = true;
         }
       }
 
@@ -325,42 +426,46 @@
       newSprite.name = 'good-box';
       newSprite.setVelocity(  Phaser.Math.FloatBetween(-0.8, 0.8) * 4,
                               Phaser.Math.FloatBetween(0.5, 1.0) * -8);
-
+      this.sound.playAudioSprite('sfx','coin');
     }
 
     function update ()
     {
+
       if(player != null)
       {
-        if (cursors.left.isDown)
+        if (cursors.left.isDown && canPlay === true)
         {
+             isMoving = true;
              player.setVelocityX(-2.5);
              player.flipX = true;
-             player.anims.play('left', true);
+             player.play('left',true)
+             //player.anims.play('left', true);
+             //this.sound.playAudioSprite('sfx','walking');
+
+
         }
-        else if (cursors.right.isDown)
+        else if (cursors.right.isDown && canPlay === true)
         {
+              isMoving = true;
               player.setVelocityX(2.5);
               player.flipX = false;
-              player.anims.play('right', true);
+              player.play('right',true)
+              //player.anims.play('right', true);
+              //this.sound.playAudioSprite('sfx','walking');
         }
         else
         {
+             isMoving = false;
              player.setVelocityX(0);
              player.anims.play('stopped');
-        }
 
-        if (cursors.up.isDown)// && canJump && upKeyReleased)
-        {
-            if(player.body.isStatic == true)
-            {
-              player.setFixedRotation();
-              player.setStatic(false);
-            }
+             if(player.body.velocity.y != 0 && !touchingGround)
+             {
+               player.play('falling', false);
+             }
 
-            canJump = false;
-            upKeyReleased = false;
-            player.setVelocityY(-3.5);
+
         }
       }
 

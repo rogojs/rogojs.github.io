@@ -273,6 +273,10 @@
           particleEmitters.platform.emitParticleAt(event.pairs[0].bodyB.gameObject.x,event.pairs[0].bodyB.gameObject.y);
           this.cameras.main.shake(100,0.01);
           currentScore++;
+          if(currentScore > lastHighScore)
+          {
+            this.sound.playAudioSprite('sfx','fanfare');
+          }
           onscreenMessages.CurrentScore.instance.setText('SCORE: ' + currentScore);
           player.setVelocityY(-8.5);
           touchingGround = false;
@@ -285,6 +289,10 @@
           particleEmitters.platform.emitParticleAt(event.pairs[0].bodyB.gameObject.x,event.pairs[0].bodyB.gameObject.y);
           this.cameras.main.shake(100,0.01);
           currentScore++;
+          if(currentScore > lastHighScore)
+          {
+            this.sound.playAudioSprite('sfx','fanfare');
+          }
           onscreenMessages.CurrentScore.instance.setText('SCORE: ' + currentScore);
           player.setVelocityY(-8.5);
           touchingGround = false;
@@ -309,6 +317,9 @@
 
         if(objectAInCollision === 'player' && objectBInCollision === 'ground' && gameStarted == true)
         {
+          music.theme.instance.setVolume(0.0);
+          this.sound.playAudioSprite('sfx','medium_explosion');
+
           particleEmitters.player.emitParticleAt(event.pairs[0].bodyA.gameObject.x,event.pairs[0].bodyA.gameObject.y);
 
           this.cameras.main.shake(250,0.05);
@@ -319,6 +330,7 @@
           {
             lastHighScore = currentScore;
             onscreenMessages.Score.instance.setText('*NEW BEST*\n' +  currentScore);
+            this.sound.playAudioSprite('sfx','high_score');
           }
           else
           {
@@ -349,12 +361,14 @@
         {
           particleEmitters.platform.emitParticleAt(event.pairs[0].bodyB.gameObject.x,event.pairs[0].bodyB.gameObject.y);
           event.pairs[0].bodyB.gameObject.destroy();
+          this.sound.playAudioSprite('sfx','odd_explosion');
         }
 
         if(objectAInCollision === 'good-box' && objectBInCollision === 'ground')
         {
           particleEmitters.platform.emitParticleAt(event.pairs[0].bodyA.gameObject.x,event.pairs[0].bodyA.gameObject.y);
           event.pairs[0].bodyB.gameObject.destroy();
+          this.sound.playAudioSprite('sfx','odd_explosion');
         }
 
         if(objectAInCollision === 'good-box' && objectBInCollision === 'good-box')
@@ -362,6 +376,7 @@
           particleEmitters.platform.emitParticleAt(event.pairs[0].bodyB.gameObject.x,event.pairs[0].bodyB.gameObject.y);
           particleEmitters.platform.emitParticleAt(event.pairs[0].bodyA.gameObject.x,event.pairs[0].bodyA.gameObject.y);
           event.pairs[0].bodyB.gameObject.destroy();
+          this.sound.playAudioSprite('sfx','odd_explosion');
         }
 
       }.bind(this));
@@ -415,6 +430,7 @@
           onscreenMessages.Score.instance.visible = false;
           player.visible = true;
           canPlay = true;
+          music.theme.instance.setVolume(0.5);
         }
       }
 

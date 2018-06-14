@@ -22,6 +22,26 @@
       "start": 0.586,
       "end": 1.256,
       "loop": false
+    },
+    "odd_explosion": {
+      "start": 1.276,
+      "end": 1.926,
+      "loop": false
+    },
+    "medium_explosion": {
+      "start": 1.946,
+      "end": 3.235,
+      "loop": false
+    },
+    "fanfare": {
+      "start": 3.254,
+      "end": 3.541,
+      "loop": false
+    },
+    "high_score": {
+      "start": 3.562,
+      "end": 6.369,
+      "loop": false
     }
   }
 }
